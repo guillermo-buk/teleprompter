@@ -275,14 +275,7 @@
     z-index: 5;
   }
 
-  #toggle-sidebar {
-    background: none; border: none;
-    color: var(--text-secondary);
-    cursor: pointer; padding: 6px;
-    border-radius: 6px;
-    transition: all 0.2s;
-    display: flex;
-  }
+  #toggle-sidebar { background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 6px; border-radius: 6px; transition: all 0.2s; display: flex; }
   #toggle-sidebar:hover { color: var(--text-primary); background: var(--border); }
 
   #current-script-title {
@@ -582,6 +575,19 @@
     text-align: center;
   }
 
+  /* mirror mode */
+  #prompter-wrap.mirrored #prompter-scroll {
+    transform-origin: center center;
+  }
+  #prompter-wrap.mirrored #prompter-text {
+    transform: scaleX(-1);
+  }
+  #btn-mirror.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid rgba(232,255,71,0.3);
+  }
+
   /* scrollbar */
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -655,6 +661,11 @@
       <div id="current-script-title">Selecciona un guión</div>
 
       <div class="topbar-right">
+        <button class="ctrl-btn sm" id="btn-mirror" title="Modo espejo">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="3" x2="12" y2="21"/><path d="M16 7l4 5-4 5"/><path d="M8 7l-4 5 4 5"/>
+          </svg>
+        </button>
         <div id="controller-indicator">
           <span>🎮</span>
           <span id="ctrl-label">Sin mando</span>
@@ -777,6 +788,7 @@ function init() {
   startScrollLoop();
   setupGamepad();
   setupKeyboard();
+  setupTouch();
 
   $('save-url-btn').addEventListener('click', () => {
     const url = apiUrlInput.value.trim();
@@ -787,7 +799,13 @@ function init() {
     showToast('URL guardada ✓');
   });
 
-  fontSlider.addEventListener('input', e => updateFontSize(parseInt(e.target.value)));
+  state.mirrored = localStorage.getItem('tp_mirror') === '1';
+  if (state.mirrored) {
+    $('prompter-wrap').classList.add('mirrored');
+    $('btn-mirror').classList.add('active');
+  }
+
+  $('btn-mirror').addEventListener('click', toggleMirror);
   speedSlider.addEventListener('input', e => updateSpeed(parseFloat(e.target.value)));
 
   btnPlay.addEventListener('click', togglePlay);
@@ -798,6 +816,17 @@ function init() {
   $('btn-font-up').addEventListener('click', () => updateFontSize(state.fontSize + 2));
   $('toggle-sidebar').addEventListener('click', toggleSidebar);
   refreshBtn.addEventListener('click', loadScripts);
+}
+
+// ─────────────────────────────────────────────
+//  MIRROR
+// ─────────────────────────────────────────────
+function toggleMirror() {
+  state.mirrored = !state.mirrored;
+  $('prompter-wrap').classList.toggle('mirrored', state.mirrored);
+  $('btn-mirror').classList.toggle('active', state.mirrored);
+  localStorage.setItem('tp_mirror', state.mirrored ? '1' : '0');
+  showToast(state.mirrored ? 'Modo espejo ON' : 'Modo espejo OFF');
 }
 
 // ─────────────────────────────────────────────
@@ -1063,6 +1092,75 @@ function setupKeyboard() {
       case 'BracketLeft': updateFontSize(state.fontSize - 2); break;
       case 'Tab': e.preventDefault(); toggleSidebar(); break;
     }
+  });
+}
+
+// ─────────────────────────────────────────────
+//  TOUCH (iPad / mobile)
+// ─────────────────────────────────────────────
+function setupTouch() {
+  const wrap = $('prompter-wrap');
+  let touchStartY = 0;
+  let touchLastY = 0;
+  let touchLastTime = 0;
+  let velocity = 0;
+  let isTouching = false;
+  let momentumRaf = null;
+
+  wrap.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) return;
+    isTouching = true;
+    touchStartY = e.touches[0].clientY;
+    touchLastY = touchStartY;
+    touchLastTime = Date.now();
+    velocity = 0;
+    if (momentumRaf) cancelAnimationFrame(momentumRaf);
+    e.preventDefault();
+  }, { passive: false });
+
+  wrap.addEventListener('touchmove', e => {
+    if (!isTouching || e.touches.length !== 1) return;
+    const y = e.touches[0].clientY;
+    const now = Date.now();
+    const dt = now - touchLastTime;
+    const dy = touchLastY - y; // positive = scroll down
+
+    if (dt > 0) velocity = dy / dt; // px/ms
+
+    state.scrollY += dy;
+    const maxScroll = prompterScroll.scrollHeight - window.innerHeight;
+    state.scrollY = Math.max(0, Math.min(maxScroll, state.scrollY));
+    prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
+
+    touchLastY = y;
+    touchLastTime = now;
+    e.preventDefault();
+  }, { passive: false });
+
+  wrap.addEventListener('touchend', e => {
+    isTouching = false;
+
+    // momentum scroll
+    const deceleration = 0.95;
+    function momentum() {
+      if (Math.abs(velocity) < 0.01) return;
+      velocity *= deceleration;
+      state.scrollY += velocity * 16;
+      const maxScroll = prompterScroll.scrollHeight - window.innerHeight;
+      state.scrollY = Math.max(0, Math.min(maxScroll, state.scrollY));
+      prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
+      momentumRaf = requestAnimationFrame(momentum);
+    }
+    momentumRaf = requestAnimationFrame(momentum);
+
+    // si el scroll fue muy corto = tap = play/pause
+    const totalDelta = Math.abs(touchStartY - touchLastY);
+    if (totalDelta < 10) {
+      togglePlay();
+    }
+
+    // resync lastTime para que el autoplay no salte
+    lastTime = performance.now();
   });
 }
 
