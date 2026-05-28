@@ -1107,6 +1107,19 @@ function setupTouch() {
   let isTouching = false;
   let momentumRaf = null;
 
+  // ── Mouse wheel / trackpad ──
+  wrap.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (momentumRaf) cancelAnimationFrame(momentumRaf);
+
+    state.scrollY += e.deltaY;
+    const maxScroll = prompterScroll.scrollHeight - window.innerHeight;
+    state.scrollY = Math.max(0, Math.min(maxScroll, state.scrollY));
+    prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
+    lastTime = performance.now();
+  }, { passive: false });
+
+  // ── Touch (iPad) ──
   wrap.addEventListener('touchstart', e => {
     if (e.touches.length !== 1) return;
     isTouching = true;
@@ -1123,9 +1136,9 @@ function setupTouch() {
     const y = e.touches[0].clientY;
     const now = Date.now();
     const dt = now - touchLastTime;
-    const dy = touchLastY - y; // positive = scroll down
+    const dy = touchLastY - y;
 
-    if (dt > 0) velocity = dy / dt; // px/ms
+    if (dt > 0) velocity = dy / dt;
 
     state.scrollY += dy;
     const maxScroll = prompterScroll.scrollHeight - window.innerHeight;
@@ -1140,7 +1153,6 @@ function setupTouch() {
   wrap.addEventListener('touchend', e => {
     isTouching = false;
 
-    // momentum scroll
     const deceleration = 0.95;
     function momentum() {
       if (Math.abs(velocity) < 0.01) return;
@@ -1153,13 +1165,9 @@ function setupTouch() {
     }
     momentumRaf = requestAnimationFrame(momentum);
 
-    // si el scroll fue muy corto = tap = play/pause
     const totalDelta = Math.abs(touchStartY - touchLastY);
-    if (totalDelta < 10) {
-      togglePlay();
-    }
+    if (totalDelta < 10) togglePlay();
 
-    // resync lastTime para que el autoplay no salte
     lastTime = performance.now();
   });
 }
