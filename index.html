@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Teleprompter</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
 <style>
   :root {
     --bg: #0a0a0a;
@@ -27,7 +27,7 @@
     width: 100%; height: 100%;
     background: var(--bg);
     color: var(--text-primary);
-    font-family: 'DM Sans', sans-serif;
+    font-family: Arial, Helvetica, sans-serif;
     overflow: hidden;
   }
 
@@ -403,7 +403,7 @@
   }
 
   #prompter-text {
-    font-family: 'DM Serif Display', serif;
+    font-family: Arial, Helvetica, sans-serif;
     font-size: var(--font-size);
     line-height: 1.45;
     color: var(--text-primary);
@@ -425,8 +425,8 @@
     text-transform: uppercase;
     color: var(--accent);
     margin-bottom: 0.4em;
-    font-family: 'DM Mono', monospace;
-    font-weight: 500;
+    font-family: Arial, Helvetica, sans-serif;
+    font-weight: 700;
   }
 
   #prompter-text p.empty {
@@ -580,7 +580,7 @@
     transform-origin: center center;
   }
   #prompter-wrap.mirrored #prompter-text {
-    transform: scaleX(-1);
+    transform: scaleY(-1);
   }
   #btn-mirror.active {
     background: var(--accent-dim);
@@ -638,6 +638,15 @@
           <span class="control-value" id="speed-display">5</span>
         </div>
         <input type="range" id="speed-slider" min="1" max="20" value="5" step="1">
+      </div>
+
+      <!-- Gamepad sensitivity -->
+      <div class="control-row">
+        <div class="control-label">
+          <span>Sensibilidad mando</span>
+          <span class="control-value" id="gp-sens-display">5</span>
+        </div>
+        <input type="range" id="gp-sens-slider" min="1" max="10" value="5" step="1">
       </div>
 
       <!-- API URL -->
@@ -741,6 +750,7 @@ const state = {
   isPlaying: false,
   speed: parseFloat(localStorage.getItem('tp_speed')) || 5,
   fontSize: parseInt(localStorage.getItem('tp_font')) || 42,
+  gpSensitivity: parseFloat(localStorage.getItem('tp_gp_sens')) || 5,
   scrollY: 0,
   rafId: null,
   pollInterval: null,
@@ -780,6 +790,13 @@ function init() {
   updateFontSize(state.fontSize);
   updateSpeed(state.speed);
   apiUrlInput.value = state.apiUrl;
+  $('gp-sens-slider').value = state.gpSensitivity;
+  $('gp-sens-display').textContent = state.gpSensitivity;
+  $('gp-sens-slider').addEventListener('input', e => {
+    state.gpSensitivity = parseFloat(e.target.value);
+    $('gp-sens-display').textContent = state.gpSensitivity;
+    localStorage.setItem('tp_gp_sens', state.gpSensitivity);
+  });
 
   if (state.apiUrl) {
     loadScripts();
@@ -1225,9 +1242,10 @@ function gamepadLoop() {
   // Left stick Y axis = speed
   const axisY = gp.axes[1]; // -1 up, +1 down
   if (Math.abs(axisY) > 0.3) {
-    // Speed changes based on stick deflection
-    if (!gamepadPrev._speedThrottle || Date.now() - gamepadPrev._speedThrottle > 200) {
-      changeSpeed(axisY > 0 ? -0.5 : 0.5);
+    const throttleMs = Math.max(50, 300 - (state.gpSensitivity - 1) * 28);
+    if (!gamepadPrev._speedThrottle || Date.now() - gamepadPrev._speedThrottle > throttleMs) {
+      const delta = axisY > 0 ? -0.5 : 0.5;
+      changeSpeed(delta * (state.gpSensitivity / 5));
       gamepadPrev._speedThrottle = Date.now();
     }
   }
