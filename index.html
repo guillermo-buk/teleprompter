@@ -885,12 +885,20 @@ function scrollLoop(timestamp) {
 
   // pixels per second = speed * 20
   const pps = state.speed * 20;
-  state.scrollY += (pps * delta) / 1000;
+  const direction = state.mirrored ? -1 : 1;
+  state.scrollY += (pps * delta * direction) / 1000;
 
   const maxScroll = prompterScroll.scrollHeight - window.innerHeight;
-  if (state.scrollY >= maxScroll) {
-    state.scrollY = maxScroll;
-    pause();
+  if (state.mirrored) {
+    if (state.scrollY <= 0) {
+      state.scrollY = 0;
+      pause();
+    }
+  } else {
+    if (state.scrollY >= maxScroll) {
+      state.scrollY = maxScroll;
+      pause();
+    }
   }
 
   prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
@@ -925,8 +933,13 @@ function pause() {
 
 function restart() {
   pause();
-  state.scrollY = 0;
-  prompterScroll.style.transform = 'translateY(0)';
+  if (state.mirrored) {
+    const maxScroll = prompterScroll.scrollHeight - window.innerHeight;
+    state.scrollY = Math.max(0, maxScroll);
+  } else {
+    state.scrollY = 0;
+  }
+  prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
 }
 
 // ─────────────────────────────────────────────
@@ -1052,6 +1065,18 @@ function renderPrompterContent(data) {
   }).join('');
 
   prompterText.innerHTML = html;
+
+  // En modo espejo partir desde el final
+  requestAnimationFrame(() => {
+    if (state.mirrored) {
+      const maxScroll = prompterScroll.scrollHeight - window.innerHeight;
+      state.scrollY = Math.max(0, maxScroll);
+      prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
+    } else {
+      state.scrollY = 0;
+      prompterScroll.style.transform = 'translateY(0)';
+    }
+  });
 }
 
 function escapeHtml(text) {
