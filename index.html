@@ -576,10 +576,7 @@
   }
 
   /* mirror mode */
-  #prompter-wrap.mirrored #prompter-scroll {
-    transform-origin: center center;
-  }
-  #prompter-wrap.mirrored #prompter-text {
+  #prompter-wrap.mirrored {
     transform: scaleY(-1);
   }
   #btn-mirror.active {
@@ -883,22 +880,13 @@ function scrollLoop(timestamp) {
   const delta = timestamp - lastTime;
   lastTime = timestamp;
 
-  // pixels per second = speed * 20
   const pps = state.speed * 20;
-  const direction = state.mirrored ? -1 : 1;
-  state.scrollY += (pps * delta * direction) / 1000;
+  state.scrollY += (pps * delta) / 1000;
 
   const maxScroll = prompterScroll.scrollHeight - window.innerHeight;
-  if (state.mirrored) {
-    if (state.scrollY <= 0) {
-      state.scrollY = 0;
-      pause();
-    }
-  } else {
-    if (state.scrollY >= maxScroll) {
-      state.scrollY = maxScroll;
-      pause();
-    }
+  if (state.scrollY >= maxScroll) {
+    state.scrollY = maxScroll;
+    pause();
   }
 
   prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
@@ -933,13 +921,8 @@ function pause() {
 
 function restart() {
   pause();
-  if (state.mirrored) {
-    const maxScroll = prompterScroll.scrollHeight - window.innerHeight;
-    state.scrollY = Math.max(0, maxScroll);
-  } else {
-    state.scrollY = 0;
-  }
-  prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
+  state.scrollY = 0;
+  prompterScroll.style.transform = 'translateY(0)';
 }
 
 // ─────────────────────────────────────────────
@@ -1065,18 +1048,8 @@ function renderPrompterContent(data) {
   }).join('');
 
   prompterText.innerHTML = html;
-
-  // En modo espejo partir desde el final
-  requestAnimationFrame(() => {
-    if (state.mirrored) {
-      const maxScroll = prompterScroll.scrollHeight - window.innerHeight;
-      state.scrollY = Math.max(0, maxScroll);
-      prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
-    } else {
-      state.scrollY = 0;
-      prompterScroll.style.transform = 'translateY(0)';
-    }
-  });
+  state.scrollY = 0;
+  prompterScroll.style.transform = 'translateY(0)';
 }
 
 function escapeHtml(text) {
