@@ -524,11 +524,12 @@ function changeSpeed(delta) { updateSpeed(state.speed + delta); }
 function scrollLoop(timestamp) {
   state.rafId = requestAnimationFrame(scrollLoop);
   if (!state.isPlaying || !state.currentContent) return;
-  const delta = timestamp - lastTime;
+  const delta = Math.min(timestamp - lastTime, 100); // cap delta a 100ms para evitar saltos
   lastTime = timestamp;
   const pps = state.speed * 20;
   state.scrollY += (pps * delta) / 1000;
   const maxScroll = prompterScroll.scrollHeight - window.innerHeight;
+  if (maxScroll <= 0) return; // contenido aún no renderizado
   if (state.scrollY >= maxScroll) { state.scrollY = maxScroll; pause(); }
   prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
 }
