@@ -729,6 +729,7 @@
 <div id="gamepad-hint">
   <div class="hint-row"><span class="hint-key">✕</span> Play / Pausa</div>
   <div class="hint-row"><span class="hint-key">L↑↓</span> Velocidad</div>
+  <div class="hint-row"><span class="hint-key">R↑↓</span> Scroll manual</div>
   <div class="hint-row"><span class="hint-key">L1</span> Reiniciar</div>
   <div class="hint-row"><span class="hint-key">R1</span> Siguiente</div>
 </div>
@@ -1246,6 +1247,17 @@ function gamepadLoop() {
       changeSpeed(delta * (state.gpSensitivity / 5));
       gamepadPrev._speedThrottle = Date.now();
     }
+  }
+
+  // Right stick Y axis = scroll manual
+  const rightAxisY = gp.axes[3]; // -1 up, +1 down
+  if (Math.abs(rightAxisY) > 0.15) {
+    const scrollSpeed = rightAxisY * state.gpSensitivity * 8;
+    state.scrollY += scrollSpeed;
+    const maxScroll = prompterScroll.scrollHeight - window.innerHeight;
+    state.scrollY = Math.max(0, Math.min(maxScroll, state.scrollY));
+    prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
+    lastTime = performance.now();
   }
 
   // D-pad up/down = speed
