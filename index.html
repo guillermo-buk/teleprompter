@@ -436,14 +436,14 @@
 
   /* ── BOTTOM CONTROLS ── */
   #bottom-controls {
-    height: 72px;
+    min-height: 80px;
     border-top: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 12px;
     padding: 0 24px;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-bottom: max(env(safe-area-inset-bottom, 16px), 16px);
     background: var(--surface);
     flex-shrink: 0;
   }
@@ -1198,51 +1198,47 @@ function setupTouch() {
 // ─────────────────────────────────────────────
 let gamepadPrev = {};
 
-function setupGamepad() {
-  window.addEventListener('gamepadconnected', e => {
-    state.gamepadIndex = e.gamepad.index;
-    controllerIndicator.classList.add('connected');
-    ctrlLabel.textContent = 'Mando OK';
-    gamepadHint.classList.add('visible');
-    showToast('🎮 Mando conectado');
-  });
+// ─────────────────────────────────────────────
+//  GAMEPAD (PS4 / PS5)
+// ─────────────────────────────────────────────
+let gamepadPrev = {};
 
+function setupGamepad() {
   window.addEventListener('gamepaddisconnected', () => {
     state.gamepadIndex = null;
     controllerIndicator.classList.remove('connected');
     ctrlLabel.textContent = 'Sin mando';
     gamepadHint.classList.remove('visible');
+    $('gp-debug').style.display = 'none';
     showToast('Mando desconectado');
   });
 
-  // Polling activo — necesario para Safari/iPad que no dispara el evento
-  setInterval(() => {
-    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-    for (let i = 0; i < gamepads.length; i++) {
-      const gp = gamepads[i];
-      if (gp && state.gamepadIndex === null) {
-        state.gamepadIndex = gp.index;
-        controllerIndicator.classList.add('connected');
-        ctrlLabel.textContent = 'Mando OK';
-        gamepadHint.classList.add('visible');
-        $('gp-debug').style.display = 'block';
-        showToast('🎮 Mando conectado');
-        gamepadLoop();
-      }
-    }
-  }, 500);
+  // Siempre correr el loop — detecta conexión internamente
+  gamepadLoop();
 }
 
 function gamepadLoop() {
-  if (state.gamepadIndex === null) return;
+  requestAnimationFrame(gamepadLoop);
 
-  const gp = navigator.getGamepads()[state.gamepadIndex];
-  if (!gp) { requestAnimationFrame(gamepadLoop); return; }
+  const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
 
-  // PS4 button map:
-  // 0=✕  1=○  2=□  3=△
-  // 4=L1 5=R1 6=L2 7=R2
-  // 12=↑ 13=↓ 14=←  15=→
+  // Detectar conexión
+  let gp = null;
+  for (let i = 0; i < gamepads.length; i++) {
+    if (gamepads[i]) { gp = gamepads[i]; break; }
+  }
+
+  if (!gp) return;
+
+  // Primera detección
+  if (state.gamepadIndex === null) {
+    state.gamepadIndex = gp.index;
+    controllerIndicator.classList.add('connected');
+    ctrlLabel.textContent = 'Mando OK';
+    gamepadHint.classList.add('visible');
+    $('gp-debug').style.display = 'block';
+    showToast('🎮 Mando conectado');
+  }
 
   const btn = (i) => gp.buttons[i] && gp.buttons[i].pressed;
   const btnRising = (i) => btn(i) && !gamepadPrev[i];
@@ -1251,8 +1247,7 @@ function gamepadLoop() {
   const btnsEl = $('gp-btns');
   const axesInfoEl = $('gp-axes-info');
   if (btnsEl) {
-    const pressed = gp.buttons.map((b, i) => b.pressed ? `<span style="color:#fff">B${i}✓</span>` : `<span style="color:#333">B${i}</span>`).join(' ');
-    btnsEl.innerHTML = pressed;
+    btnsEl.innerHTML = gp.buttons.map((b, i) => b.pressed ? `<span style="color:#fff">B${i}✓</span>` : `<span style="color:#333">B${i}</span>`).join(' ');
   }
   if (axesInfoEl) {
     axesInfoEl.innerHTML = gp.axes.map((a, i) => `A${i}:<b>${a.toFixed(1)}</b>`).join(' ');
@@ -1270,19 +1265,18 @@ function gamepadLoop() {
   // □ = prev script
   if (btnRising(2)) prevScript();
 
-  // Left stick Y axis = speed
-  const axisY = gp.axes[1]; // -1 up, +1 down
+  // Left stick Y = speed
+  const axisY = gp.axes[1];
   if (Math.abs(axisY) > 0.3) {
     const throttleMs = Math.max(50, 300 - (state.gpSensitivity - 1) * 28);
     if (!gamepadPrev._speedThrottle || Date.now() - gamepadPrev._speedThrottle > throttleMs) {
-      const delta = axisY > 0 ? -0.5 : 0.5;
-      changeSpeed(delta * (state.gpSensitivity / 5));
+      changeSpeed((axisY > 0 ? -0.5 : 0.5) * (state.gpSensitivity / 5));
       gamepadPrev._speedThrottle = Date.now();
     }
   }
 
-  // Right stick Y axis = scroll manual
-  const rightAxisY = gp.axes[3]; // -1 up, +1 down
+  // Right stick Y = scroll manual
+  const rightAxisY = gp.axes[3];
   if (Math.abs(rightAxisY) > 0.15) {
     const scrollSpeed = rightAxisY * state.gpSensitivity * 8;
     state.scrollY += scrollSpeed;
@@ -1296,12 +1290,10 @@ function gamepadLoop() {
   if (btnRising(12)) changeSpeed(1);
   if (btnRising(13)) changeSpeed(-1);
 
-  // Save prev state
+  // Guardar estado previo
   for (let i = 0; i < gp.buttons.length; i++) {
     gamepadPrev[i] = btn(i);
   }
-
-  requestAnimationFrame(gamepadLoop);
 }
 
 // ─────────────────────────────────────────────
