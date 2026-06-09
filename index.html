@@ -816,6 +816,13 @@ function gamepadLoop() {
   if (rising(12)) changeSpeed(1);
   if (rising(13)) changeSpeed(-1);
 
+  // D-pad como axis (iPad/Safari)
+  const dpadY = gp.axes[9] || 0;
+  if (dpadY < -0.5 && !gpPrev._dpadUp) { changeSpeed(1); gpPrev._dpadUp = true; }
+  else if (dpadY >= -0.5) { gpPrev._dpadUp = false; }
+  if (dpadY > 0.5 && !gpPrev._dpadDown) { changeSpeed(-1); gpPrev._dpadDown = true; }
+  else if (dpadY <= 0.5) { gpPrev._dpadDown = false; }
+
   for (let i = 0; i < gp.buttons.length; i++) gpPrev[i] = btn(i);
 }
 
