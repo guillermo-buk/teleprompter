@@ -207,6 +207,49 @@
   .prompter-fade-top { top: 0; background: linear-gradient(to bottom, var(--bg), transparent); }
   .prompter-fade-bottom { bottom: 0; background: linear-gradient(to top, var(--bg), transparent); }
 
+  /* PÁRRAFOS MODIFICADOS */
+  #prompter-text p.changed {
+    position: relative;
+    background: rgba(232,255,71,0.07);
+    border-radius: 6px;
+    box-shadow: -8px 0 0 -4px var(--accent);
+    animation: changedFlash 2.5s ease-out 3;
+  }
+  @keyframes changedFlash {
+    0%, 100% { background: rgba(232,255,71,0.07); }
+    50% { background: rgba(232,255,71,0.20); }
+  }
+
+  /* BOTÓN IR AL CAMBIO */
+  #jump-change {
+    position: fixed; left: 50%; bottom: 140px;
+    transform: translateX(-50%);
+    background: var(--accent); color: #0a0a0a;
+    border: none; border-radius: 22px;
+    padding: 10px 18px; font-size: 12px; font-weight: 700;
+    font-family: Arial, Helvetica, sans-serif;
+    letter-spacing: 0.04em; cursor: pointer;
+    z-index: 5; display: none;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  #jump-change.visible { display: block; }
+  #jump-change:active { transform: translateX(-50%) scale(0.96); }
+
+  /* TIMECODE */
+  #timecode {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 10px; border-radius: 20px;
+    background: var(--border); color: var(--text-primary);
+    font-size: 11px; font-variant-numeric: tabular-nums;
+    letter-spacing: 0.05em;
+  }
+  #timecode .tc-rest { color: var(--text-secondary); }
+  #tc-bar {
+    height: 2px; background: var(--border);
+    position: relative; flex-shrink: 0;
+  }
+  #tc-fill { position: absolute; left: 0; top: 0; height: 100%; background: var(--accent); width: 0%; }
+
   #prompter-scroll {
     position: absolute; top: 0; left: 0; right: 0;
     padding: 50vh 10% 50vh; will-change: transform;
@@ -351,6 +394,10 @@
       <button id="toggle-sidebar">☰</button>
       <div id="current-script-title">Selecciona un guión</div>
       <div class="topbar-right">
+        <div id="timecode">
+          <span id="tc-elapsed">00:00</span>
+          <span class="tc-rest">/ <span id="tc-total">00:00</span></span>
+        </div>
         <button id="btn-mirror">ESPEJO</button>
         <div id="controller-indicator">
           <span>🎮</span>
@@ -376,6 +423,8 @@
       </div>
     </div>
 
+    <div id="tc-bar"><div id="tc-fill"></div></div>
+
     <div id="bottom-controls">
       <button class="ctrl-btn sm" id="btn-restart" title="Reiniciar">↺</button>
       <button class="ctrl-btn sm" id="btn-slower" title="Más lento">−</button>
@@ -394,7 +443,10 @@
   <div class="hint-row"><span class="hint-key">R↑↓</span> Scroll</div>
   <div class="hint-row"><span class="hint-key">L1</span> Reiniciar</div>
   <div class="hint-row"><span class="hint-key">R1</span> Siguiente</div>
+  <div class="hint-row"><span class="hint-key">△</span> Ir al cambio</div>
 </div>
+
+<button id="jump-change">↓ Ir al cambio</button>
 
 <div id="toast"></div>
 
@@ -416,6 +468,9 @@ const state = {
   pollInterval: null,
   lastModified: null,
   sidebarVisible: true,
+  lines: [],
+  changeTargets: [],
+  changeCursor: 0,
 };
 
 const $ = id => document.getElementById(id);
@@ -489,6 +544,11 @@ function init() {
   $('btn-font-up').addEventListener('click', () => updateFontSize(state.fontSize + 2));
   $('toggle-sidebar').addEventListener('click', toggleSidebar);
   refreshBtn.addEventListener('click', loadScripts);
+  $('jump-change').addEventListener('click', jumpToChange);
+  $('tc-bar').addEventListener('click', e => {
+    const r = $('tc-bar').getBoundingClientRect();
+    setScroll(((e.clientX - r.left) / r.width) * maxScrollPx());
+  });
 }
 
 // ── MIRROR ──
@@ -516,6 +576,7 @@ function updateSpeed(spd) {
   $('speed-display').textContent = Math.round(spd);
   speedSlider.value = spd;
   localStorage.setItem('tp_speed', spd);
+  if (typeof updateTimecode === 'function') updateTimecode(true);
 }
 
 function changeSpeed(delta) { updateSpeed(state.speed + delta); }
@@ -532,6 +593,7 @@ function scrollLoop(timestamp) {
   if (maxScroll <= 0) return; // contenido aún no renderizado
   if (state.scrollY >= maxScroll) { state.scrollY = maxScroll; pause(); }
   prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
+  updateTimecode();
 }
 
 function startScrollLoop() {
@@ -558,8 +620,7 @@ function pause() {
 }
 function restart() {
   pause();
-  state.scrollY = 0;
-  prompterScroll.style.transform = 'translateY(0)';
+  setScroll(0);
 }
 
 // ── LOAD SCRIPTS ──
@@ -612,6 +673,9 @@ async function selectScript(script) {
   pause(); restart();
   state.currentScript = script;
   state.lastModified = null;
+  state.lines = [];
+  state.currentContent = null;
+  clearChangeMarks();
   currentTitle.textContent = script.name;
   scriptsList.querySelectorAll('.script-item').forEach((el, i) => {
     el.classList.toggle('active', state.scripts[i] && state.scripts[i].id === script.id);
@@ -631,9 +695,14 @@ async function fetchScriptContent(docId, silent = false) {
     const changed = state.lastModified !== data.modified;
     state.lastModified = data.modified;
     if (changed) {
+      const isUpdate = silent && !!state.currentContent;
       state.currentContent = data;
-      renderPrompterContent(data);
-      if (silent) showToast('Guión actualizado ✓');
+      renderPrompterContent(data, isUpdate);
+      if (isUpdate) {
+        showToast(state.changeTargets.length
+          ? `Guión actualizado ✓ · ${state.changeTargets.length} cambio(s) marcado(s)`
+          : 'Guión actualizado ✓');
+      }
     }
     setLiveStatus('syncing', 'En vivo');
   } catch (err) {
@@ -642,16 +711,161 @@ async function fetchScriptContent(docId, silent = false) {
   }
 }
 
-function renderPrompterContent(data) {
+// ── SCROLL HELPERS ──
+function maxScrollPx() {
+  return Math.max(0, prompterScroll.scrollHeight - window.innerHeight);
+}
+function setScroll(y) {
+  state.scrollY = Math.max(0, Math.min(maxScrollPx(), y));
+  prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
+  lastTime = performance.now();
+  updateTimecode();
+}
+
+// ── ANCLA DE LECTURA ──
+// Guarda qué párrafo está en la línea de lectura y a qué altura de pantalla está.
+function captureAnchor() {
+  const ps = prompterText.children;
+  if (!ps.length) return null;
+  const target = state.scrollY + prompterWrap.clientHeight / 3;
+  let best = 0, bestD = Infinity;
+  for (let i = 0; i < ps.length; i++) {
+    const d = Math.abs(ps[i].offsetTop - target);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return { index: best, screenOffset: ps[best].offsetTop - state.scrollY };
+}
+
+function restoreAnchor(anchor, map) {
+  if (!anchor) return;
+  const ps = prompterText.children;
+  if (!ps.length) return;
+  let newIdx = -1;
+  if (map) {
+    if (map[anchor.index] >= 0) newIdx = map[anchor.index];
+    else {
+      for (let i = anchor.index - 1; i >= 0; i--) {
+        if (map[i] >= 0) { newIdx = map[i]; break; }
+      }
+    }
+  }
+  if (newIdx < 0) newIdx = Math.min(anchor.index, ps.length - 1);
+  const el = ps[newIdx];
+  if (!el) return;
+  setScroll(el.offsetTop - anchor.screenOffset);
+}
+
+// ── DIFF DE LÍNEAS (LCS) ──
+// Devuelve: map[viejo] = nuevo (o -1) y los índices nuevos que cambiaron.
+function diffLines(a, b) {
+  const n = a.length, m = b.length;
+  const map = new Array(n).fill(-1);
+  const changed = [];
+  if (!n) { for (let j = 0; j < m; j++) changed.push(j); return { map, changed }; }
+  if ((n + 1) * (m + 1) > 1500000) { // guión enorme: fallback por índice
+    for (let i = 0; i < n && i < m; i++) map[i] = i;
+    return { map, changed };
+  }
+  const W = m + 1;
+  const dp = new Uint32Array((n + 1) * W);
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i * W + j] = (a[i] === b[j])
+        ? dp[(i + 1) * W + j + 1] + 1
+        : Math.max(dp[(i + 1) * W + j], dp[i * W + j + 1]);
+    }
+  }
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { map[i] = j; i++; j++; }
+    else if (dp[(i + 1) * W + j] >= dp[i * W + j + 1]) { changed.push(Math.min(j, m - 1)); i++; } // línea borrada
+    else { changed.push(j); j++; }                                                                // línea nueva
+  }
+  while (j < m) { changed.push(j); j++; }
+  if (i < n && m) changed.push(m - 1);
+  return { map, changed: [...new Set(changed)].sort((x, y) => x - y) };
+}
+
+function renderPrompterContent(data, preserve = false) {
+  const oldLines = state.lines || [];
+  const newLines = data.lines.map(l => l.text);
+
+  let anchor = null, diff = null;
+  if (preserve && oldLines.length) {
+    anchor = captureAnchor();
+    diff = diffLines(oldLines, newLines);
+  }
+  const changedSet = new Set(diff ? diff.changed : []);
+
   emptyPrompter.style.display = 'none';
   prompterText.style.display = 'block';
-  prompterText.innerHTML = data.lines.map(line => {
-    if (!line.text.trim()) return '<p class="empty"></p>';
-    const isHeading = line.style !== 'NORMAL' && line.style !== 'null';
-    return `<p class="${isHeading ? 'heading' : ''}">${escapeHtml(line.text)}</p>`;
+  prompterText.innerHTML = data.lines.map((line, i) => {
+    const cls = [];
+    if (!line.text.trim()) cls.push('empty');
+    else if (line.style !== 'NORMAL' && line.style !== 'null') cls.push('heading');
+    if (changedSet.has(i)) cls.push('changed');
+    if (!line.text.trim()) return `<p class="${cls.join(' ')}"></p>`;
+    return `<p class="${cls.join(' ')}">${escapeHtml(line.text)}</p>`;
   }).join('');
-  state.scrollY = 0;
-  prompterScroll.style.transform = 'translateY(0)';
+
+  state.lines = newLines;
+  state.changeTargets = diff ? diff.changed : [];
+  state.changeCursor = 0;
+
+  if (preserve && anchor) {
+    restoreAnchor(anchor, diff.map);
+  } else {
+    setScroll(0);
+  }
+  updateJumpButton();
+  updateTimecode(true);
+}
+
+// ── IR AL CAMBIO ──
+function updateJumpButton() {
+  const btn = $('jump-change');
+  const has = state.changeTargets && state.changeTargets.length > 0;
+  btn.classList.toggle('visible', has);
+  if (has) {
+    btn.textContent = state.changeTargets.length > 1
+      ? `↓ Ir al cambio (${state.changeCursor + 1}/${state.changeTargets.length})`
+      : '↓ Ir al cambio';
+  }
+}
+
+function jumpToChange() {
+  if (!state.changeTargets || !state.changeTargets.length) return;
+  const idx = state.changeTargets[state.changeCursor % state.changeTargets.length];
+  const el = prompterText.children[idx];
+  state.changeCursor = (state.changeCursor + 1) % state.changeTargets.length;
+  updateJumpButton();
+  if (!el) return;
+  setScroll(el.offsetTop - prompterWrap.clientHeight / 3);
+}
+
+function clearChangeMarks() {
+  prompterText.querySelectorAll('p.changed').forEach(p => p.classList.remove('changed'));
+  state.changeTargets = [];
+  state.changeCursor = 0;
+  updateJumpButton();
+}
+
+// ── TIMECODE ──
+let tcLast = 0;
+function fmtTime(s) {
+  s = Math.max(0, Math.round(s));
+  const m = Math.floor(s / 60);
+  return String(m).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+}
+function updateTimecode(force) {
+  const now = performance.now();
+  if (!force && now - tcLast < 200) return;
+  tcLast = now;
+  const max = maxScrollPx();
+  const pps = state.speed * 20;
+  $('tc-elapsed').textContent = fmtTime(state.scrollY / pps);
+  $('tc-total').textContent = fmtTime(max / pps);
+  $('tc-fill').style.width = (max > 0 ? (state.scrollY / max) * 100 : 0) + '%';
 }
 
 function escapeHtml(text) {
@@ -689,6 +903,8 @@ function setupKeyboard() {
       case 'BracketLeft': updateFontSize(state.fontSize - 2); break;
       case 'Tab': e.preventDefault(); toggleSidebar(); break;
       case 'KeyN': nextScript(); break;
+      case 'KeyG': jumpToChange(); break;
+      case 'KeyC': clearChangeMarks(); break;
     }
   });
 }
@@ -702,11 +918,7 @@ function setupTouch() {
   wrap.addEventListener('wheel', e => {
     e.preventDefault();
     if (momentumRaf) cancelAnimationFrame(momentumRaf);
-    state.scrollY += e.deltaY;
-    const maxScroll = prompterScroll.scrollHeight - window.innerHeight;
-    state.scrollY = Math.max(0, Math.min(maxScroll, state.scrollY));
-    prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
-    lastTime = performance.now();
+    setScroll(state.scrollY + e.deltaY);
   }, { passive: false });
 
   wrap.addEventListener('touchstart', e => {
@@ -726,10 +938,7 @@ function setupTouch() {
     const dt = now - touchLastTime;
     const dy = touchLastY - y;
     if (dt > 0) velocity = dy / dt;
-    state.scrollY += dy;
-    const maxScroll = prompterScroll.scrollHeight - window.innerHeight;
-    state.scrollY = Math.max(0, Math.min(maxScroll, state.scrollY));
-    prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
+    setScroll(state.scrollY + dy);
     touchLastY = y;
     touchLastTime = now;
     e.preventDefault();
@@ -740,10 +949,7 @@ function setupTouch() {
     function momentum() {
       if (Math.abs(velocity) < 0.01) return;
       velocity *= 0.95;
-      state.scrollY += velocity * 16;
-      const maxScroll = prompterScroll.scrollHeight - window.innerHeight;
-      state.scrollY = Math.max(0, Math.min(maxScroll, state.scrollY));
-      prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
+      setScroll(state.scrollY + velocity * 16);
       momentumRaf = requestAnimationFrame(momentum);
     }
     momentumRaf = requestAnimationFrame(momentum);
@@ -793,6 +999,7 @@ function gamepadLoop() {
   if (rising(4)) restart();
   if (rising(5)) nextScript();
   if (rising(2)) prevScript();
+  if (rising(3)) jumpToChange();
 
   // Left stick Y = velocidad
   const axisY = gp.axes[1] || 0;
@@ -807,11 +1014,7 @@ function gamepadLoop() {
   // Right stick Y = scroll manual
   const rAxisY = gp.axes[3] || 0;
   if (Math.abs(rAxisY) > 0.15) {
-    state.scrollY += rAxisY * state.gpSensitivity * 8;
-    const maxScroll = prompterScroll.scrollHeight - window.innerHeight;
-    state.scrollY = Math.max(0, Math.min(maxScroll, state.scrollY));
-    prompterScroll.style.transform = `translateY(${-state.scrollY}px)`;
-    lastTime = performance.now();
+    setScroll(state.scrollY + rAxisY * state.gpSensitivity * 8);
   }
 
   if (rising(12)) changeSpeed(1);
