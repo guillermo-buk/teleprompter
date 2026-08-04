@@ -471,6 +471,7 @@ const state = {
   lines: [],
   changeTargets: [],
   changeCursor: 0,
+  contentSig: null,
 };
 
 const $ = id => document.getElementById(id);
@@ -543,7 +544,10 @@ function init() {
   $('btn-font-down').addEventListener('click', () => updateFontSize(state.fontSize - 2));
   $('btn-font-up').addEventListener('click', () => updateFontSize(state.fontSize + 2));
   $('toggle-sidebar').addEventListener('click', toggleSidebar);
-  refreshBtn.addEventListener('click', loadScripts);
+  refreshBtn.addEventListener('click', () => {
+    loadScripts();
+    if (state.currentScript) fetchScriptContent(state.currentScript.id, false, true);
+  });
   $('jump-change').addEventListener('click', jumpToChange);
   $('tc-bar').addEventListener('click', e => {
     const r = $('tc-bar').getBoundingClientRect();
@@ -629,7 +633,7 @@ async function loadScripts() {
   refreshBtn.classList.add('spinning');
   setLiveStatus('syncing', 'Conectando...');
   try {
-    const res = await fetch(`${state.apiUrl}?action=list`);
+    const res = await fetch(`${state.apiUrl}?action=list&_=${Date.now()}`, { cache: 'no-store' });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     state.scripts = data.scripts || [];
@@ -673,6 +677,7 @@ async function selectScript(script) {
   pause(); restart();
   state.currentScript = script;
   state.lastModified = null;
+  state.contentSig = null;
   state.lines = [];
   state.currentContent = null;
   clearChangeMarks();
@@ -686,14 +691,29 @@ async function selectScript(script) {
   }, 4000);
 }
 
-async function fetchScriptContent(docId, silent = false) {
+// Firma del contenido: si cualquier línea (texto o estilo) cambia, la firma cambia.
+// No dependemos solo del timestamp `modified`, que en Google Docs llega tarde,
+// tiene granularidad de segundos y a veces no vuelve a moverse tras un autosave.
+function contentSignature(data) {
+  if (!data || !data.lines) return '';
+  return data.lines.length + '|' + data.lines.map(l => (l.style || '') + ':' + l.text).join('\n');
+}
+
+async function fetchScriptContent(docId, silent = false, force = false) {
   if (!silent) setLiveStatus('syncing', 'Cargando...');
   try {
-    const res = await fetch(`${state.apiUrl}?action=get&id=${docId}`);
+    // Cache-buster + no-store: iPad/Safari cachea agresivamente los GET a la
+    // misma URL, y sin esto el poll devuelve siempre la versión vieja del guión.
+    const res = await fetch(`${state.apiUrl}?action=get&id=${docId}&_=${Date.now()}`, { cache: 'no-store' });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-    const changed = state.lastModified !== data.modified;
+
+    const sig = contentSignature(data);
+    const changed = force || sig !== state.contentSig;
+
     state.lastModified = data.modified;
+    state.contentSig = sig;
+
     if (changed) {
       const isUpdate = silent && !!state.currentContent;
       state.currentContent = data;
