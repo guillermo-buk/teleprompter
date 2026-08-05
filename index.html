@@ -442,7 +442,8 @@
   <div class="hint-row"><span class="hint-key">L↑↓</span> Velocidad</div>
   <div class="hint-row"><span class="hint-key">R↑↓</span> Scroll</div>
   <div class="hint-row"><span class="hint-key">L1</span> Reiniciar</div>
-  <div class="hint-row"><span class="hint-key">R1</span> Siguiente</div>
+  <div class="hint-row"><span class="hint-key">R1</span> Letra +</div>
+  <div class="hint-row"><span class="hint-key">R2</span> Letra −</div>
   <div class="hint-row"><span class="hint-key">△</span> Ir al cambio</div>
 </div>
 
@@ -1017,8 +1018,8 @@ function gamepadLoop() {
 
   if (rising(0)) togglePlay();
   if (rising(4)) restart();
-  if (rising(5)) nextScript();
-  if (rising(2)) prevScript();
+  if (rising(5)) updateFontSize(state.fontSize + 2); // R1 = agrandar letra
+  if (rising(7)) updateFontSize(state.fontSize - 2); // R2 = achicar letra
   if (rising(3)) jumpToChange();
 
   // Left stick Y = velocidad
