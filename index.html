@@ -441,7 +441,8 @@
   <div class="hint-row"><span class="hint-key">✕</span> Play / Pausa</div>
   <div class="hint-row"><span class="hint-key">L↑↓</span> Velocidad</div>
   <div class="hint-row"><span class="hint-key">R↑↓</span> Scroll</div>
-  <div class="hint-row"><span class="hint-key">L1</span> Reiniciar</div>
+  <div class="hint-row"><span class="hint-key">L1</span> Velocidad +</div>
+  <div class="hint-row"><span class="hint-key">L2</span> Velocidad −</div>
   <div class="hint-row"><span class="hint-key">R1</span> Letra +</div>
   <div class="hint-row"><span class="hint-key">R2</span> Letra −</div>
   <div class="hint-row"><span class="hint-key">△</span> Ir al cambio</div>
@@ -899,11 +900,6 @@ function nextScript() {
   const idx = state.currentScript ? state.scripts.findIndex(s => s.id === state.currentScript.id) : -1;
   selectScript(state.scripts[(idx + 1) % state.scripts.length]);
 }
-function prevScript() {
-  if (!state.scripts.length) return;
-  const idx = state.currentScript ? state.scripts.findIndex(s => s.id === state.currentScript.id) : 0;
-  selectScript(state.scripts[(idx - 1 + state.scripts.length) % state.scripts.length]);
-}
 
 // ── SIDEBAR ──
 function toggleSidebar() {
@@ -1017,7 +1013,8 @@ function gamepadLoop() {
   const rising = i => btn(i) && !gpPrev[i];
 
   if (rising(0)) togglePlay();
-  if (rising(4)) restart();
+  if (rising(4)) changeSpeed(1);  // L1 = + velocidad
+  if (rising(6)) changeSpeed(-1); // L2 = - velocidad
   if (rising(5)) updateFontSize(state.fontSize + 2); // R1 = agrandar letra
   if (rising(7)) updateFontSize(state.fontSize - 2); // R2 = achicar letra
   if (rising(3)) jumpToChange();
