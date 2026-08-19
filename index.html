@@ -327,6 +327,13 @@
     padding: 1px 6px; font-size: 10px; color: var(--text-primary);
     min-width: 28px; text-align: center;
   }
+  #hint-close {
+    position: absolute; top: 6px; right: 8px;
+    background: none; border: none; color: var(--text-secondary);
+    font-size: 13px; line-height: 1; cursor: pointer; padding: 2px 4px;
+  }
+  #hint-close:hover { color: var(--text-primary); }
+  #controller-indicator { cursor: pointer; }
 
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -438,6 +445,7 @@
 </div>
 
 <div id="gamepad-hint">
+  <button id="hint-close" title="Ocultar (toca 🎮 para volver a mostrar)">✕</button>
   <div class="hint-row"><span class="hint-key">✕</span> Play / Pausa</div>
   <div class="hint-row"><span class="hint-key">L↑↓</span> Velocidad</div>
   <div class="hint-row"><span class="hint-key">R↑↓</span> Scroll</div>
@@ -465,6 +473,7 @@ const state = {
   fontSize: parseInt(localStorage.getItem('tp_font')) || 42,
   gpSensitivity: parseFloat(localStorage.getItem('tp_gp_sens')) || 5,
   mirrored: localStorage.getItem('tp_mirror') === '1',
+  hintHidden: localStorage.getItem('tp_hint_hidden') === '1',
   scrollY: 0,
   rafId: null,
   pollInterval: null,
@@ -554,6 +563,20 @@ function init() {
   $('tc-bar').addEventListener('click', e => {
     const r = $('tc-bar').getBoundingClientRect();
     setScroll(((e.clientX - r.left) / r.width) * maxScrollPx());
+  });
+
+  $('hint-close').addEventListener('click', () => {
+    state.hintHidden = true;
+    localStorage.setItem('tp_hint_hidden', '1');
+    gamepadHint.classList.remove('visible');
+    showToast('Ayuda de mando oculta · toca 🎮 para verla');
+  });
+
+  controllerIndicator.addEventListener('click', () => {
+    if (!controllerIndicator.classList.contains('connected')) return;
+    state.hintHidden = !state.hintHidden;
+    localStorage.setItem('tp_hint_hidden', state.hintHidden ? '1' : '0');
+    gamepadHint.classList.toggle('visible', !state.hintHidden);
   });
 }
 
@@ -1005,7 +1028,7 @@ function gamepadLoop() {
   if (!controllerIndicator.classList.contains('connected')) {
     controllerIndicator.classList.add('connected');
     ctrlLabel.textContent = 'Mando OK';
-    gamepadHint.classList.add('visible');
+    if (!state.hintHidden) gamepadHint.classList.add('visible');
     showToast('🎮 Mando conectado');
   }
 
