@@ -282,7 +282,7 @@
     color: var(--text-primary); text-align: left;
     width: 100%; margin: 0;
   }
-  #prompter-text p { margin-bottom: 0.6em; }
+  #prompter-text p { margin-bottom: 0.6em; transition: background 0.5s ease, box-shadow 0.5s ease; }
   #prompter-text p.heading {
     font-size: 0.65em; letter-spacing: 0.2em; text-transform: uppercase;
     color: var(--accent); margin-bottom: 0.4em; font-weight: 700;
@@ -980,10 +980,14 @@ function jumpToChange() {
   if (!state.changeTargets || !state.changeTargets.length) return;
   const idx = state.changeTargets[state.changeCursor % state.changeTargets.length];
   const el = prompterText.children[idx];
-  state.changeCursor = (state.changeCursor + 1) % state.changeTargets.length;
+  if (el) {
+    setScroll(el.offsetTop - prompterWrap.clientHeight / 3);
+    el.classList.remove('changed'); // quitar la marca amarilla al ir al cambio
+  }
+  // sacar este cambio de los pendientes para que no quede pegado
+  state.changeTargets = state.changeTargets.filter(t => t !== idx);
+  if (state.changeCursor >= state.changeTargets.length) state.changeCursor = 0;
   updateJumpButton();
-  if (!el) return;
-  setScroll(el.offsetTop - prompterWrap.clientHeight / 3);
 }
 
 function clearChangeMarks() {
