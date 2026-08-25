@@ -15,6 +15,8 @@
     --text-secondary: #555;
     --text-dim: #2a2a2a;
     --font-size: 42px;
+    --line-height: 1.45;
+    --side-margin: 10%;
     --sidebar-w: 280px;
   }
 
@@ -191,6 +193,16 @@
   }
   #btn-mirror.active { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(232,255,71,0.3); }
 
+  #btn-hide-controls {
+    background: var(--border); border: none;
+    border-radius: 8px; color: var(--text-primary);
+    cursor: pointer; padding: 8px 12px; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+  #btn-hide-controls.active { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(232,255,71,0.3); }
+
+  #bottom-controls.hidden { display: none; }
+
   /* PROMPTER */
   #prompter-wrap {
     flex: 1; position: relative; overflow: hidden; background: var(--bg);
@@ -252,13 +264,13 @@
 
   #prompter-scroll {
     position: absolute; top: 0; left: 0; right: 0;
-    padding: 50vh 10% 50vh; will-change: transform;
+    padding: 50vh var(--side-margin) 50vh; will-change: transform;
   }
   #prompter-text {
     font-family: Arial, Helvetica, sans-serif;
-    font-size: var(--font-size); line-height: 1.45;
-    color: var(--text-primary); text-align: center;
-    max-width: 900px; margin: 0 auto;
+    font-size: var(--font-size); line-height: var(--line-height);
+    color: var(--text-primary); text-align: left;
+    width: 100%; margin: 0;
   }
   #prompter-text p { margin-bottom: 0.6em; }
   #prompter-text p.heading {
@@ -375,6 +387,20 @@
       </div>
       <div class="control-row">
         <div class="control-label">
+          <span>Interlineado</span>
+          <span class="control-value" id="lh-display">1.45</span>
+        </div>
+        <input type="range" id="lh-slider" min="1" max="2.6" value="1.45" step="0.05">
+      </div>
+      <div class="control-row">
+        <div class="control-label">
+          <span>Márgenes laterales</span>
+          <span class="control-value" id="margin-display">10%</span>
+        </div>
+        <input type="range" id="margin-slider" min="0" max="30" value="10" step="1">
+      </div>
+      <div class="control-row">
+        <div class="control-label">
           <span>Velocidad</span>
           <span class="control-value" id="speed-display">5</span>
         </div>
@@ -406,6 +432,7 @@
           <span class="tc-rest">/ <span id="tc-total">00:00</span></span>
         </div>
         <button id="btn-mirror">ESPEJO</button>
+        <button id="btn-hide-controls" title="Ocultar barra de controles">OCULTAR</button>
         <div id="controller-indicator">
           <span>🎮</span>
           <span id="ctrl-label">Sin mando</span>
@@ -471,6 +498,9 @@ const state = {
   isPlaying: false,
   speed: parseFloat(localStorage.getItem('tp_speed')) || 5,
   fontSize: parseInt(localStorage.getItem('tp_font')) || 42,
+  lineHeight: parseFloat(localStorage.getItem('tp_lh')) || 1.45,
+  sideMargin: (localStorage.getItem('tp_margin') !== null ? parseInt(localStorage.getItem('tp_margin')) : 10),
+  controlsHidden: localStorage.getItem('tp_controls_hidden') === '1',
   gpSensitivity: parseFloat(localStorage.getItem('tp_gp_sens')) || 5,
   mirrored: localStorage.getItem('tp_mirror') === '1',
   hintHidden: localStorage.getItem('tp_hint_hidden') === '1',
@@ -496,8 +526,11 @@ const prompterText  = $('prompter-text');
 const emptyPrompter = $('empty-prompter');
 const btnPlay       = $('btn-play');
 const fontSlider    = $('font-slider');
+const lhSlider      = $('lh-slider');
+const marginSlider  = $('margin-slider');
 const speedSlider   = $('speed-slider');
 const gpSensSlider  = $('gp-sens-slider');
+const bottomControls= $('bottom-controls');
 const liveIndicator = $('live-indicator');
 const liveLabel     = $('live-label');
 const ctrlLabel     = $('ctrl-label');
@@ -512,10 +545,15 @@ let lastTime = 0;
 // ── INIT ──
 function init() {
   fontSlider.value = state.fontSize;
+  lhSlider.value = state.lineHeight;
+  marginSlider.value = state.sideMargin;
   speedSlider.value = state.speed;
   gpSensSlider.value = state.gpSensitivity;
   updateFontSize(state.fontSize);
+  updateLineHeight(state.lineHeight);
+  updateSideMargin(state.sideMargin);
   updateSpeed(state.speed);
+  applyControlsHidden();
   $('api-url').value = state.apiUrl;
   $('gp-sens-display').textContent = Math.round(state.gpSensitivity);
 
@@ -541,7 +579,10 @@ function init() {
   });
 
   $('btn-mirror').addEventListener('click', toggleMirror);
+  $('btn-hide-controls').addEventListener('click', toggleControls);
   fontSlider.addEventListener('input', e => updateFontSize(parseInt(e.target.value)));
+  lhSlider.addEventListener('input', e => updateLineHeight(parseFloat(e.target.value)));
+  marginSlider.addEventListener('input', e => updateSideMargin(parseInt(e.target.value)));
   speedSlider.addEventListener('input', e => updateSpeed(parseFloat(e.target.value)));
   gpSensSlider.addEventListener('input', e => {
     state.gpSensitivity = parseFloat(e.target.value);
@@ -597,6 +638,37 @@ function updateFontSize(size) {
   $('font-display').textContent = size + 'px';
   fontSlider.value = size;
   localStorage.setItem('tp_font', size);
+}
+
+function updateLineHeight(lh) {
+  lh = Math.max(1, Math.min(2.6, lh));
+  state.lineHeight = lh;
+  document.documentElement.style.setProperty('--line-height', lh);
+  $('lh-display').textContent = lh.toFixed(2);
+  lhSlider.value = lh;
+  localStorage.setItem('tp_lh', lh);
+}
+
+function updateSideMargin(m) {
+  m = Math.max(0, Math.min(30, m));
+  state.sideMargin = m;
+  document.documentElement.style.setProperty('--side-margin', m + '%');
+  $('margin-display').textContent = m + '%';
+  marginSlider.value = m;
+  localStorage.setItem('tp_margin', m);
+}
+
+function applyControlsHidden() {
+  bottomControls.classList.toggle('hidden', state.controlsHidden);
+  $('btn-hide-controls').classList.toggle('active', state.controlsHidden);
+  $('btn-hide-controls').textContent = state.controlsHidden ? 'MOSTRAR' : 'OCULTAR';
+}
+
+function toggleControls() {
+  state.controlsHidden = !state.controlsHidden;
+  localStorage.setItem('tp_controls_hidden', state.controlsHidden ? '1' : '0');
+  applyControlsHidden();
+  showToast(state.controlsHidden ? 'Controles ocultos' : 'Controles visibles');
 }
 
 function updateSpeed(spd) {
