@@ -193,6 +193,14 @@
   }
   #btn-mirror.active { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(232,255,71,0.3); }
 
+  #btn-flip {
+    background: var(--border); border: none;
+    border-radius: 8px; color: var(--text-primary);
+    cursor: pointer; padding: 8px 12px; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+  #btn-flip.active { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(232,255,71,0.3); }
+
   #btn-hide-controls {
     background: var(--border); border: none;
     border-radius: 8px; color: var(--text-primary);
@@ -208,6 +216,8 @@
     flex: 1; position: relative; overflow: hidden; background: var(--bg);
   }
   #prompter-wrap.mirrored { transform: scaleY(-1); }
+  #prompter-wrap.flipped { transform: rotate(180deg); }
+  #prompter-wrap.flipped.mirrored { transform: rotate(180deg) scaleY(-1); }
 
   #prompter-wrap::before {
     content: ''; position: absolute; left: 0; right: 0; top: 33.33%; height: 2px; z-index: 3; pointer-events: none;
@@ -432,6 +442,7 @@
           <span class="tc-rest">/ <span id="tc-total">00:00</span></span>
         </div>
         <button id="btn-mirror">ESPEJO</button>
+        <button id="btn-flip" title="Girar 180° (iPad invertido)">GIRAR</button>
         <button id="btn-hide-controls" title="Ocultar barra de controles">OCULTAR</button>
         <div id="controller-indicator">
           <span>🎮</span>
@@ -503,6 +514,7 @@ const state = {
   controlsHidden: localStorage.getItem('tp_controls_hidden') === '1',
   gpSensitivity: parseFloat(localStorage.getItem('tp_gp_sens')) || 5,
   mirrored: localStorage.getItem('tp_mirror') === '1',
+  flipped: localStorage.getItem('tp_flip') === '1',
   hintHidden: localStorage.getItem('tp_hint_hidden') === '1',
   scrollY: 0,
   rafId: null,
@@ -562,6 +574,11 @@ function init() {
     $('btn-mirror').classList.add('active');
   }
 
+  if (state.flipped) {
+    prompterWrap.classList.add('flipped');
+    $('btn-flip').classList.add('active');
+  }
+
   if (state.apiUrl) loadScripts();
 
   startScrollLoop();
@@ -579,6 +596,7 @@ function init() {
   });
 
   $('btn-mirror').addEventListener('click', toggleMirror);
+  $('btn-flip').addEventListener('click', toggleFlip);
   $('btn-hide-controls').addEventListener('click', toggleControls);
   fontSlider.addEventListener('input', e => updateFontSize(parseInt(e.target.value)));
   lhSlider.addEventListener('input', e => updateLineHeight(parseFloat(e.target.value)));
@@ -628,6 +646,14 @@ function toggleMirror() {
   $('btn-mirror').classList.toggle('active', state.mirrored);
   localStorage.setItem('tp_mirror', state.mirrored ? '1' : '0');
   showToast(state.mirrored ? 'Modo espejo ON' : 'Modo espejo OFF');
+}
+
+function toggleFlip() {
+  state.flipped = !state.flipped;
+  prompterWrap.classList.toggle('flipped', state.flipped);
+  $('btn-flip').classList.toggle('active', state.flipped);
+  localStorage.setItem('tp_flip', state.flipped ? '1' : '0');
+  showToast(state.flipped ? 'Pantalla girada 180°' : 'Pantalla normal');
 }
 
 // ── FONT & SPEED ──
